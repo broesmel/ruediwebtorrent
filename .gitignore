@@ -1,0 +1,12 @@
+# Runtime data
+data/
+
+# Dependencies
+node_modules/
+
+# Environment — never commit secrets
+.env
+
+# OS
+.DS_Store
+Thumbs.db
