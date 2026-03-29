@@ -1,8 +1,11 @@
 import 'dotenv/config'
 import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'path'
+import { readFileSync } from 'fs'
 import express from 'express'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
+import { apiReference } from '@scalar/express-api-reference'
 import authRoutes    from './routes/auth.js'
 import torrentRoutes from './routes/torrents.js'
 import fileRoutes    from './routes/files.js'
@@ -64,6 +67,15 @@ export function createApp() {
   app.use('/api/files',    fileRoutes)
   app.use('/api/billing',  billingRoutes)
   app.use('/api/admin',    adminRoutes)
+
+  // API docs — Scalar UI
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const spec = readFileSync(resolve(__dirname, '../../openapi.yaml'), 'utf8')
+  app.use('/api/docs', apiReference({
+    content: spec,
+    theme: 'default',
+    metaData: { title: 'ruediwebtorrent API' },
+  }))
 
   // 404 for unknown routes
   app.use((req, res) => {

@@ -412,9 +412,10 @@ npm run db:seed    # write default pricing keys to LevelDB
 | 6 | Credit conversion & deposit flow | ✅ done |
 | 7 | Usage metering, balance enforcer & file reaper jobs | ✅ done |
 | 8 | Real-time progress & hardening | ✅ done |
-| 9 | **decentral.ninja integration — keypair auth** | 🔲 todo |
-| 10 | **decentral.ninja integration — TorrentProvider browser module** | 🔲 todo |
-| 11 | **CORS, rate limiting & production hardening** | 🔲 todo |
+| 9 | **decentral.ninja integration — keypair auth** | ✅ done |
+| 10 | **decentral.ninja integration — TorrentProvider browser module** | ✅ done |
+| 11 | **CORS, rate limiting & production hardening** | ✅ done |
+| 12 | **OpenAPI spec, Scalar UI & README** | ✅ done |
 
 ---
 

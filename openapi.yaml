@@ -1,0 +1,520 @@
+openapi: 3.1.0
+info:
+  title: ruediwebtorrent
+  version: 1.0.0
+  description: |
+    WebTorrent seedbox and file hosting service for decentralized chat systems.
+    Users authenticate with an Ed25519 keypair (no email or password required).
+    Files are seeded via WebTorrent and billed by GB-hour using cryptocurrency (LTC, XMR).
+
+servers:
+  - url: /api
+    description: Local / production server
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # -------------------------------------------------------------------------
+  # Health
+  # -------------------------------------------------------------------------
+  /health:
+    get:
+      summary: Health check
+      description: Returns server uptime and the number of active torrents in the WebTorrent client.
+      operationId: getHealth
+      security: []
+      tags: [Health]
+      responses:
+        '200':
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          uptime:       { type: number, description: Seconds since process start }
+                          torrentCount: { type: integer, description: Torrents loaded in WebTorrent client }
+
+  # -------------------------------------------------------------------------
+  # Auth
+  # -------------------------------------------------------------------------
+  /auth/challenge:
+    get:
+      summary: Get challenge nonce
+      description: |
+        Returns a one-time nonce valid for 60 seconds.
+        Sign the nonce (as UTF-8 bytes) with your Ed25519 private key and submit
+        the hex-encoded signature to `POST /auth/login`.
+      operationId: getChallenge
+      security: []
+      tags: [Auth]
+      responses:
+        '200':
+          description: Nonce issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [nonce, expiresAt]
+                        properties:
+                          nonce:
+                            type: string
+                            description: 64-character hex-encoded random nonce
+                            example: a3f2e1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2
+                          expiresAt:
+                            type: integer
+                            description: Unix timestamp (ms) when the nonce expires
+
+  /auth/login:
+    post:
+      summary: Authenticate with Ed25519 keypair
+      description: |
+        Verifies the Ed25519 signature over the challenge nonce.
+        On success, returns a JWT. The nonce is consumed immediately (one-time use).
+
+        **First login auto-registers the user — no separate registration step.**
+
+        `userId` is derived as `sha256(pubkeyHex)`.
+      operationId: login
+      security: []
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pubkey, nonce, signature]
+              properties:
+                pubkey:
+                  type: string
+                  description: Hex-encoded Ed25519 public key (64 characters)
+                  example: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+                nonce:
+                  type: string
+                  description: The nonce returned by GET /auth/challenge (64-char hex)
+                  example: a3f2e1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2
+                signature:
+                  type: string
+                  description: Hex-encoded Ed25519 signature of the nonce (UTF-8 bytes)
+                  example: d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5
+      responses:
+        '200':
+          description: Authenticated — JWT returned
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [token, user]
+                        properties:
+                          token:
+                            type: string
+                            description: JWT — include as Authorization Bearer token
+                          user:
+                            type: object
+                            required: [id, isAdmin]
+                            properties:
+                              id:      { type: string, description: sha256(pubkeyHex) }
+                              isAdmin: { type: boolean }
+        '400':
+          description: Missing or malformed request fields
+        '401':
+          description: Invalid signature, expired nonce, or nonce reuse
+
+  /auth/me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user from the JWT.
+      operationId: getMe
+      tags: [Auth]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id, pubkey, isAdmin]
+                        properties:
+                          id:      { type: string }
+                          pubkey:  { type: string, description: Hex-encoded Ed25519 public key }
+                          isAdmin: { type: boolean }
+        '401':
+          description: Missing or invalid token
+
+  # -------------------------------------------------------------------------
+  # Files
+  # -------------------------------------------------------------------------
+  /files/upload:
+    post:
+      summary: Upload and seed a file
+      description: |
+        Accepts a multipart file upload, seeds it via WebTorrent, persists the
+        torrent record, and begins GB-hour billing immediately.
+        Maximum file size is controlled by `MAX_FILE_SIZE_MB` (default 500 MB).
+      operationId: uploadFile
+      tags: [Files]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: File seeded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [infoHash, magnetUri, name, sizeBytes]
+                        properties:
+                          infoHash:  { type: string, description: 40-char hex info hash }
+                          magnetUri: { type: string }
+                          name:      { type: string }
+                          sizeBytes: { type: integer }
+        '400':
+          description: No file provided
+        '401':
+          description: Unauthenticated
+        '402':
+          description: Balance depleted and grace period expired
+        '413':
+          description: File exceeds MAX_FILE_SIZE_MB limit
+
+  # -------------------------------------------------------------------------
+  # Torrents
+  # -------------------------------------------------------------------------
+  /torrents:
+    get:
+      summary: List user's torrents
+      description: Returns all torrents for the authenticated user with live WebTorrent stats merged in.
+      operationId: listTorrents
+      tags: [Torrents]
+      responses:
+        '200':
+          description: Torrent list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Torrent'
+        '401':
+          description: Unauthenticated
+
+    post:
+      summary: Add torrent by magnet URI
+      description: |
+        Adds a torrent to the WebTorrent client by magnet URI.
+        Must be a valid `magnet:?xt=urn:btih:` URI. Starts billing immediately.
+      operationId: addTorrent
+      tags: [Torrents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [magnet]
+              properties:
+                magnet:
+                  type: string
+                  description: Magnet URI
+                  example: "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Example"
+      responses:
+        '201':
+          description: Torrent added
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Torrent'
+        '400':
+          description: Missing or invalid magnet URI
+        '401':
+          description: Unauthenticated
+        '402':
+          description: Balance depleted
+
+  /torrents/{hash}:
+    parameters:
+      - name: hash
+        in: path
+        required: true
+        description: 40-character hex info hash
+        schema: { type: string, example: dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c }
+
+    get:
+      summary: Get torrent
+      description: Returns a single torrent record with live stats merged in.
+      operationId: getTorrent
+      tags: [Torrents]
+      responses:
+        '200':
+          description: Torrent found
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Torrent'
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Torrent not found
+
+    delete:
+      summary: Delete torrent
+      description: Removes the torrent from the WebTorrent client and the database.
+      operationId: deleteTorrent
+      tags: [Torrents]
+      parameters:
+        - name: destroyFiles
+          in: query
+          required: false
+          description: Also delete the seeded files from disk
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { nullable: true, example: null }
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Torrent not found
+
+  /torrents/{hash}/progress:
+    parameters:
+      - name: hash
+        in: path
+        required: true
+        description: 40-character hex info hash
+        schema: { type: string, example: dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c }
+
+    get:
+      summary: Real-time SSE progress stream
+      description: |
+        Server-Sent Events stream. Emits a JSON payload every 2 seconds:
+        ```json
+        {
+          "progress": 0.42,
+          "uploadSpeed": 51200,
+          "numPeers": 4,
+          "balanceMicroCredits": 12500,
+          "gracePeriodEndsAt": null,
+          "scheduledDeleteAt": null
+        }
+        ```
+        A keepalive comment (`: keepalive`) is sent every 15 seconds.
+
+        **Note:** Use `EventSource` in the browser. Standard fetch and the "Try it"
+        feature in Scalar will not work for SSE streams. Use `curl -N` or a dedicated
+        SSE client instead.
+      operationId: getTorrentProgress
+      tags: [Torrents]
+      responses:
+        '200':
+          description: SSE stream opened
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  data: {"progress":0.42,"uploadSpeed":51200,"numPeers":4,"balanceMicroCredits":12500,"gracePeriodEndsAt":null,"scheduledDeleteAt":null}
+
+                  : keepalive
+        '401':
+          description: Unauthenticated
+        '404':
+          description: Torrent not found
+
+  # -------------------------------------------------------------------------
+  # Billing
+  # -------------------------------------------------------------------------
+  /billing/deposit:
+    post:
+      summary: Request a deposit address
+      description: |
+        Returns a cryptocurrency deposit address for the authenticated user.
+        Rate limited to 5 requests per minute per user.
+        Accepted currencies are configured via the `ACCEPTED_CURRENCIES` env var (default: `ltc,xmr`).
+      operationId: requestDeposit
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currency]
+              properties:
+                currency:
+                  type: string
+                  description: Currency code — `ltc` or `xmr`
+                  enum: [ltc, xmr]
+                  example: ltc
+      responses:
+        '201':
+          description: Deposit address created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [currency, address]
+                        properties:
+                          currency: { type: string, example: ltc }
+                          address:  { type: string, example: LXyz123... }
+        '400':
+          description: Unsupported currency
+        '401':
+          description: Unauthenticated
+        '429':
+          description: Rate limit exceeded (5 requests/minute)
+
+  # -------------------------------------------------------------------------
+  # Admin
+  # -------------------------------------------------------------------------
+  /admin/stats:
+    get:
+      summary: Admin statistics
+      description: Returns aggregate stats across all users and torrents. Requires admin role.
+      operationId: getAdminStats
+      tags: [Admin]
+      responses:
+        '200':
+          description: Stats
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [userCount, torrentCount, totalBalanceMicroCredits]
+                        properties:
+                          userCount:               { type: integer }
+                          torrentCount:            { type: integer }
+                          totalBalanceMicroCredits: { type: integer }
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Authenticated but not an admin
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by `POST /auth/login` after Ed25519 challenge-response.
+        Include as: `Authorization: Bearer <token>`
+
+  schemas:
+    Torrent:
+      type: object
+      properties:
+        infoHash:
+          type: string
+          description: 40-char hex info hash
+        name:
+          type: string
+        magnetUri:
+          type: string
+        sizeBytes:
+          type: integer
+        state:
+          type: string
+          enum: [active, paused, deleted]
+        userId:
+          type: string
+        addedAt:
+          type: integer
+          description: Unix timestamp (ms)
+        scheduledDeleteAt:
+          type: integer
+          nullable: true
+        progress:
+          type: number
+          description: 0–1, from live WebTorrent stats
+          nullable: true
+        uploadSpeed:
+          type: integer
+          description: bytes/sec
+          nullable: true
+        numPeers:
+          type: integer
+          nullable: true
+
+    ApiResponse:
+      type: object
+      required: [success, data, error]
+      properties:
+        success:
+          type: boolean
+        data: {}
+        error:
+          type: string
+          nullable: true

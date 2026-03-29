@@ -12,6 +12,7 @@
     "db:seed": "node src/scripts/seed.js"
   },
   "dependencies": {
+    "@scalar/express-api-reference": "^0.9.5",
     "bcrypt": "^6.0.0",
     "classic-level": "^3.0.0",
     "cors": "^2.8.6",
