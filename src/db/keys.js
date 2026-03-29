@@ -4,7 +4,7 @@
  */
 export const keys = {
   user:             (id)              => `users:${id}`,
-  userByEmail:      (email)           => `users:email:${email}`,
+  userByPubkey:     (pubkey)          => `users:pubkey:${pubkey}`,
 
   torrent:          (userId, hash)    => `torrents:${userId}:${hash}`,
   torrentByHash:    (hash)            => `torrents:hash:${hash}`,
@@ -21,6 +21,4 @@ export const keys = {
   chainHeight:      (chain)           => `chain:${chain}:lastHeight`,
 
   pricing:          (key)             => `pricing:${key}`,
-
-  nextUserId:       ()                => `meta:nextUserId`,
 }

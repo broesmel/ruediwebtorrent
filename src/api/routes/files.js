@@ -15,7 +15,8 @@ const FILES_DIR = join(DATA_DIR, 'files')
 await mkdir(TMP_DIR,   { recursive: true })
 await mkdir(FILES_DIR, { recursive: true })
 
-const upload = multer({ dest: TMP_DIR })
+const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB ?? 500)
+const upload = multer({ dest: TMP_DIR, limits: { fileSize: MAX_FILE_SIZE_MB * 1024 * 1024 } })
 
 const router = Router()
 

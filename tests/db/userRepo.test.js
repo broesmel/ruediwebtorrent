@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { createHash } from 'crypto'
 
 vi.mock('../../src/db/db.js', async () => {
   const { MemoryLevel } = await import('memory-level')
@@ -9,78 +10,90 @@ import db from '../../src/db/db.js'
 import {
   createUser,
   getUserById,
-  getUserByEmail,
+  getUserByPubkey,
   updateUser,
-  getNextUserId,
+  listAllUsers,
 } from '../../src/db/repositories/userRepo.js'
+
+// 64-char hex strings representing two test public keys
+const PUBKEY_A = 'a'.repeat(64)
+const PUBKEY_B = 'b'.repeat(64)
 
 beforeEach(async () => {
   await db.clear()
 })
 
-describe('getNextUserId', () => {
-  it('starts at 1', async () => {
-    expect(await getNextUserId()).toBe(1)
-  })
-
-  it('increments on each call', async () => {
-    expect(await getNextUserId()).toBe(1)
-    expect(await getNextUserId()).toBe(2)
-    expect(await getNextUserId()).toBe(3)
-  })
-})
-
 describe('createUser', () => {
-  it('returns user with auto-incremented id', async () => {
-    const user = await createUser({ email: 'a@test.com', passwordHash: 'hash1' })
-    expect(user.id).toBe(1)
-    expect(user.email).toBe('a@test.com')
+  it('derives userId as sha256(pubkeyHex)', async () => {
+    const user = await createUser({ pubkey: PUBKEY_A })
+    const expectedId = createHash('sha256').update(PUBKEY_A).digest('hex')
+    expect(user.id).toBe(expectedId)
+  })
+
+  it('stores pubkey, isAdmin false, null gracePeriodEndsAt', async () => {
+    const user = await createUser({ pubkey: PUBKEY_A })
+    expect(user.pubkey).toBe(PUBKEY_A)
     expect(user.isAdmin).toBe(false)
     expect(user.gracePeriodEndsAt).toBeNull()
+    expect(typeof user.createdAt).toBe('number')
   })
 
-  it('assigns sequential ids to multiple users', async () => {
-    const u1 = await createUser({ email: 'a@test.com', passwordHash: 'h' })
-    const u2 = await createUser({ email: 'b@test.com', passwordHash: 'h' })
-    expect(u1.id).toBe(1)
-    expect(u2.id).toBe(2)
+  it('different pubkeys produce different userIds', async () => {
+    const u1 = await createUser({ pubkey: PUBKEY_A })
+    const u2 = await createUser({ pubkey: PUBKEY_B })
+    expect(u1.id).not.toBe(u2.id)
   })
 })
 
 describe('getUserById', () => {
   it('returns the user', async () => {
-    const created = await createUser({ email: 'x@test.com', passwordHash: 'h' })
+    const created = await createUser({ pubkey: PUBKEY_A })
     const found = await getUserById(created.id)
-    expect(found).toMatchObject({ id: created.id, email: 'x@test.com' })
+    expect(found).toMatchObject({ id: created.id, pubkey: PUBKEY_A })
   })
 
   it('returns null for unknown id', async () => {
-    expect(await getUserById(999)).toBeNull()
+    expect(await getUserById('nonexistent')).toBeNull()
   })
 })
 
-describe('getUserByEmail', () => {
-  it('returns the user via email index', async () => {
-    await createUser({ email: 'look@test.com', passwordHash: 'h' })
-    const found = await getUserByEmail('look@test.com')
+describe('getUserByPubkey', () => {
+  it('returns the user via pubkey index', async () => {
+    await createUser({ pubkey: PUBKEY_A })
+    const found = await getUserByPubkey(PUBKEY_A)
     expect(found).not.toBeNull()
-    expect(found.email).toBe('look@test.com')
+    expect(found.pubkey).toBe(PUBKEY_A)
   })
 
-  it('returns null for unknown email', async () => {
-    expect(await getUserByEmail('no@test.com')).toBeNull()
+  it('returns null for unknown pubkey', async () => {
+    expect(await getUserByPubkey(PUBKEY_B)).toBeNull()
   })
 })
 
 describe('updateUser', () => {
-  it('merges updates into existing user', async () => {
-    const user = await createUser({ email: 'u@test.com', passwordHash: 'h' })
+  it('merges updates into existing user, preserving other fields', async () => {
+    const user = await createUser({ pubkey: PUBKEY_A })
     const updated = await updateUser(user.id, { gracePeriodEndsAt: 12345 })
     expect(updated.gracePeriodEndsAt).toBe(12345)
-    expect(updated.email).toBe('u@test.com') // unchanged fields preserved
+    expect(updated.pubkey).toBe(PUBKEY_A)
   })
 
   it('throws for unknown user', async () => {
-    await expect(updateUser(999, {})).rejects.toThrow('999')
+    await expect(updateUser('nonexistent', {})).rejects.toThrow()
+  })
+})
+
+describe('listAllUsers', () => {
+  it('returns all users without pubkey-index entries', async () => {
+    await createUser({ pubkey: PUBKEY_A })
+    await createUser({ pubkey: PUBKEY_B })
+    const users = await listAllUsers()
+    expect(users).toHaveLength(2)
+    expect(users.every(u => typeof u.pubkey === 'string')).toBe(true)
+    expect(users.every(u => typeof u.id === 'string')).toBe(true)
+  })
+
+  it('returns empty array when no users exist', async () => {
+    expect(await listAllUsers()).toHaveLength(0)
   })
 })

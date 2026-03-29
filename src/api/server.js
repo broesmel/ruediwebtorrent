@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { fileURLToPath } from 'url'
 import express from 'express'
+import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import authRoutes    from './routes/auth.js'
 import torrentRoutes from './routes/torrents.js'
@@ -32,6 +33,11 @@ const authLimiter = rateLimit({
 export function createApp() {
   const app = express()
 
+  app.use(cors({
+    origin: process.env.CORS_ORIGIN ?? 'https://decentral.ninja',
+    methods: ['GET', 'POST', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }))
   app.use(express.json())
 
   // Rate limiting — skip in test environment to avoid flaky tests
