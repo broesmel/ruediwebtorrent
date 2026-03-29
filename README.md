@@ -95,7 +95,7 @@ npm start
 | `XMR_CONFIRMATIONS` | `10` | Required confirmations for XMR deposits |
 | `XMR_WALLET_ACCOUNT` | `0` | Monero wallet account index |
 | `CHAIN_POLL_INTERVAL_MS` | `60000` | Interval between deposit polls (ms) |
-| `ACCEPTED_CURRENCIES` | `ltc,xmr` | Comma-separated list of accepted currencies |
+| `ACCEPTED_CURRENCIES` | `ltc,xmr,btc,doge,zec` | Comma-separated list of accepted currencies |
 | `CORS_ORIGIN` | `https://decentral.ninja` | Allowed CORS origin |
 | `MAX_FILE_SIZE_MB` | `500` | Maximum upload file size in MB |
 

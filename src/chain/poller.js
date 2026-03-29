@@ -1,8 +1,11 @@
 import 'dotenv/config'
 import db from '../db/db.js'
 import { keys } from '../db/keys.js'
-import * as ltcNode from './ltcNode.js'
-import * as xmrNode from './xmrNode.js'
+import * as ltcNode  from './ltcNode.js'
+import * as xmrNode  from './xmrNode.js'
+import * as btcNode  from './btcNode.js'
+import * as dogeNode from './dogeNode.js'
+import * as zecNode  from './zecNode.js'
 import {
   getPendingDeposit,
   isDepositConfirmed,
@@ -13,7 +16,7 @@ import { cryptoToMicroCredits } from '../billing/credits.js'
 
 const POLL_INTERVAL_MS = Number(process.env.CHAIN_POLL_INTERVAL_MS ?? 60_000)
 
-const CHAIN_NODES = { ltc: ltcNode, xmr: xmrNode }
+const CHAIN_NODES = { ltc: ltcNode, xmr: xmrNode, btc: btcNode, doge: dogeNode, zec: zecNode }
 
 async function getLastHeight(chain) {
   const raw = await db.get(keys.chainHeight(chain))

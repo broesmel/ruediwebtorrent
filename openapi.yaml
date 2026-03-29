@@ -403,7 +403,7 @@ paths:
                 currency:
                   type: string
                   description: Currency code — `ltc` or `xmr`
-                  enum: [ltc, xmr]
+                  enum: [ltc, xmr, btc, doge, zec]
                   example: ltc
       responses:
         '201':

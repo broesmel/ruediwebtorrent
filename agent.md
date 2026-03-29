@@ -366,7 +366,7 @@ XMR_WALLET_ACCOUNT=0
 CHAIN_POLL_INTERVAL_MS=60000
 
 # Accepted currencies
-ACCEPTED_CURRENCIES=ltc,xmr
+ACCEPTED_CURRENCIES=ltc,xmr,btc,doge,zec
 
 # CORS — set to decentral.ninja origin in production
 CORS_ORIGIN=https://decentral.ninja
